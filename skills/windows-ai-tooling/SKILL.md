@@ -6,6 +6,8 @@ metadata:
   version: 1.2
   author: agent
   validated_on: RTX 5070 Laptop 8GB / Windows 11 / ComfyUI 0.39.0
+  repository: https://github.com/lenren9/windows-ai-toolkit
+  license: MIT
 ---
 
 # Windows AI tooling — setup, rescue, and small utilities
@@ -14,17 +16,19 @@ Everything below was **executed and verified on a real machine**
 (RTX 5070 Laptop, 8 GB VRAM, 32 GB RAM, Windows 11 Home CN), not theory.
 Models named here were downloaded and actually run end-to-end.
 
+Source & updates: https://github.com/lenren9/windows-ai-toolkit
+
 ## 1. Model choices that fit 8 GB VRAM
 
 Prefer quantised single-file builds. Verified-working picks:
 
 | Purpose | File | Size | Notes |
-|---|---|---|---|
+|:---|:---|---:|:---|
 | SDXL anime | `animagine-xl-3.1.safetensors` | 6.46 GB | SDXL；fp16 即可 |
-| Image→video | `wan2.2_ti2v_5B_fp16.safetensors` | 9.31 GB | 5B，8 GB 友好；配 `UnetLoaderGGUF` 用 fp8 更稳 |
+| Image→video | `wan2.2_ti2v_5B_fp16.safetensors` | 9.31 GB | 5B，8 GB 友好 |
 | Image→video (alt) | `ltx-video-2b-v0.9.5.safetensors` | 5.91 GB | 2B，最快；VAE 会把尺寸对齐到 32 的倍数 |
 | Fast txt2img | `flux1-schnell-Q4_K_S.gguf` | 6.32 GB | **蒸馏模型，6 步 / CFG 1.0**；20 步反而不对 |
-| SD1.5 base | `v1-5-pruned-emaonly-fp16.safetensors` | 1.99 GB | IP-Adapter / OpenPose 是 SD1.5 版，必须配它 |
+| SD1.5 base | `v1-5-pruned-emaonly-fp16.safetensors` | 1.99 GB | IP-Adapter / OpenPose 是 SD1.5 版 |
 | Text encoder | `t5xxl_fp8_e4m3fn.safetensors` | 4.56 GB | Flux 和 LTX **共用**，别下两遍 |
 | Companion | `clip_l.safetensors`, `ae.safetensors` | 0.23 / 0.31 GB | Flux 必需 |
 
@@ -38,7 +42,7 @@ Lower quantisations if OOM: Flux `Q3_K_S` 4.85 GB / `Q2_K` 3.73 GB.
 Measured numbers from the actual machine:
 
 | State | Used / Total |
-|---|---|
+|:---|:---|
 | Idle (game closed) | 1046 MB / 8151 MB |
 | 永劫无间 (Naraka) running | 5614 MB / 8151 MB ← only 2.5 GB left |
 | Flux GGUF 832×1216 peak | 7608 MB |
@@ -50,15 +54,13 @@ user's "显存不足" had nothing to do with AI — a game was holding 4 GB.
 Causes, in the order they usually bite:
 1. **Another GPU app running** (games, 3D, video decode) — biggest single factor
 2. Model too large / not quantised
-3. Resolution & frame count — VRAM scales ~with pixel count; 1080×1920 costs
-   several × more than 480×854
+3. Resolution & frame count — VRAM scales ~with pixel count
 4. Browser hardware acceleration + Wallpaper Engine (~600 MB combined)
 5. Fragmentation / PyTorch caching allocator holding freed blocks
 6. Dual-GPU laptops (iGPU + dGPU): verify the app runs on the **dGPU** via
    `Get-Counter '\GPU Process Memory(*)\Dedicated Usage'` and the adapter LUID
 7. "Laggy on first load" = shader compilation — normal, not a fault
 
-Find exactly who is using VRAM:
 ```powershell
 nvidia-smi --query-compute-apps=pid,used_memory --format=csv
 Get-Counter '\GPU Process Memory(*)\Dedicated Usage'   # per-process, incl. graphics
@@ -81,7 +83,7 @@ Proven offenders:
 - `ComfyUI-Reactor` — `get_restorers()` → `download()` inside `INPUT_TYPES()`
 
 Fix: move them out of `custom_nodes/`. Verify with
-`curl -w '%{time_total}' http://127.0.0.1:8188/object_info` — it should return
+`curl -w '%{time_total}' http://127.0.0.1:8188/object_info` — should return
 in ~0.1 s (it once took **50.4 s**).
 
 **Also fix the browser side:** the tab was loaded while the server was
@@ -116,8 +118,6 @@ Useful groups (all verified to import on this box):
   `mirrors.tuna.tsinghua.edu.cn`
 - **Parallel connections stall here.** Use sequential resumable:
   `curl -L -C - -o dest --speed-limit 20480 --speed-time 60 <url>`
-- Reference a specific asset via `api.github.com/repos/{r}/releases/assets/{id}`
-  with `Accept: application/octet-stream` (302s to a reachable CDN)
 - ModelScope sustained ~5–11 MB/s sequential; 8-way parallel hung
 
 ## 6. Building a tiny Windows utility (Python + tkinter)
